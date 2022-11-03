@@ -1,14 +1,22 @@
 from tkinter import filedialog
+import tkinter
 import customtkinter
 from inspect import getmembers, signature
 import deerlab as dl 
+import threading
 import matplotlib.pyplot as plt 
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
 import numpy as np
+from itertools import cycle
+import time 
+
+running = True 
+thread_results = []
 customtkinter.set_appearance_mode("Dark")  # Modes: "System" (standard), "Dark", "Light"
 customtkinter.set_default_color_theme("blue")  # Themes: "blue" (standard), "green", "dark-blue"
 
+from PIL import Image, ImageTk
 
 class App(customtkinter.CTk):
 
@@ -49,6 +57,30 @@ class App(customtkinter.CTk):
             description = ' '.join(getattr(dl,model_name).__doc__.split('\n')[1].split()[2:])[:-1]
             ex_modelnames.append(f'({model_name}) {description}') 
             ex_models.append(model_name)
+
+    def M_95(self,n=0, top=None, lbl=None):
+        # Play GIF (file name = m95.gif) in a 320x320 tkinter window
+        # Play GIF concurrently with the loading animation below
+        # Close tkinter window after play
+        global process_is_alive
+
+        process_is_alive = True
+        num_cycles = 8
+        count = len(self.frames) * num_cycles
+        delay = 8000 // count # make required cycles of animation in around 4 secs
+        if n == 0:
+            #self.withdraw()
+            self.lbl = tkinter.Label(master=self.frame_left, image=self.frames[0], width=160, height=80)
+            self.lbl.grid(row=5, column=0)
+            process_is_alive = True
+            self.lbl.after(delay, self.M_95, n+1, top, self.lbl)
+        elif n < count-1:
+            self.lbl.config(image=self.frames[n%len(self.frames)])
+            self.lbl.after(delay, self.M_95, n+1, top, self.lbl)
+        else:
+            self.lbl.destroy()
+            process_is_alive = False
+
 
     def plot_distribution(self):
             
@@ -100,6 +132,8 @@ class App(customtkinter.CTk):
 
     def run_analysis(self):
 
+        global process_is_alive
+
         ex_model = getattr(dl,[ex_model for ex_model in App.ex_models if ex_model in self.Exmodel_menu.get()][0])     
         bg_model = getattr(dl,[bg_model for bg_model in App.bg_models if bg_model in self.Bmodel_menu.get()][0])        
         dd_model = [dd_model for dd_model in App.dd_models if dd_model in self.Pmodel_menu.get()][0]   
@@ -124,18 +158,43 @@ class App(customtkinter.CTk):
         experiment = ex_model(*taus,pathways=pathways)
 
         Vmodel = dl.dipolarmodel(self.data['t'],r,Pmodel=dd_model, Bmodel=bg_model, experiment=experiment)
-        
-        results = dl.fit(Vmodel,self.data['data'])
-        if not hasattr(results,'P'):
-            P = results.evaluate(dd_model,r)
-            PUncert = results.propagate(dd_model,r,lb=np.zeros_like(r)) 
-        else: 
-            P = results.P 
-            PUncert = results.PUncert
 
-        self.results = {'r':r,'P':P,'PUncert':PUncert,'t':self.data['t'], 'model':results.model}
-        self.plot_distribution()
-        self.plot_data()
+        cancel_id = None
+        loading_label = customtkinter.CTkLabel(master=self.frame_left, width=16, height=8, bg_color=App.darker_bckg)
+        loading_label.grid(row=5, column=0)
+        def start_loading():
+            global running
+            global thread_results
+            if running:  # Animation not started?
+                loading_label.configure(image=next(self.frames))
+                app.after(10, start_loading) # call this function every 100ms
+            else:  
+                loading_label.destroy()       
+                results = thread_results[0]
+                if not hasattr(results,'P'):
+                    P = results.evaluate(dd_model,r)
+                    PUncert = results.propagate(dd_model,r,lb=np.zeros_like(r)) 
+                else: 
+                    P = results.P 
+                    PUncert = results.PUncert
+
+                self.results = {'r':r,'P':P,'PUncert':PUncert,'t':self.data['t'], 'model':results.model}
+                self.plot_distribution()
+                self.plot_data()
+
+        def loadingAnimation():
+            global running
+            global thread_results
+            running = True
+            print('Running')
+            results = dl.fit(Vmodel,self.data['data'])
+            print('Finished')
+            running = False
+            thread_results.append(results) 
+ 
+        threading.Thread(target=loadingAnimation).start()
+        start_loading()
+
         return
 
     def plot_data(self):
@@ -258,6 +317,22 @@ class App(customtkinter.CTk):
         self.title("CustomTkinter complex_example.py")
         self.geometry(f"{App.WIDTH}x{App.HEIGHT}")
         self.protocol("WM_DELETE_WINDOW", self.on_closing)  # call .on_closing() when app gets closed
+
+
+        frames = []
+        im = Image.open(r"D:\lufa\projects\DeerLab\testing\GIF4.gif")
+        for frame in range(im.n_frames):
+            image = im.seek(frame)
+            # For each pixel in the image
+            for i in range(image.size[0]):
+                for j in range(image.size[1]):
+                    # If the pixel is white
+                    if pixels[i, j] == (255, 255, 255, 255):
+                        # Make it transparent
+                        pixels[i, j] = (255, 255, 255, 0)
+            frames.append(ImageTk.PhotoImage(im.convert('RGBA').resize((160, 80))))
+        frames_cycle=cycle(frames)
+        self.frames = frames_cycle
 
         # ============ create two frames ============
 
