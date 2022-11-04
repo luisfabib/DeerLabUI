@@ -25,8 +25,8 @@ customtkinter.set_default_color_theme("green")  # Themes: "blue" (standard), "gr
 
 class App(customtkinter.CTk):
 
-    WIDTH = 1100
-    HEIGHT = 700
+    WIDTH = 1400
+    HEIGHT = 800
         
     darker_bckg = '#232937'
     dark_bckg = '#393e4b'
@@ -80,13 +80,13 @@ class App(customtkinter.CTk):
         if hasattr(self,'frame_distribution'):
             self.frame_distribution.destroy()
         
-        self.frame_distribution = customtkinter.CTkFrame(master=self.frame_right,width=400,height=250,fg_color='#ffffff')
-        self.frame_distribution.grid(row=0, column=1)
+        self.frame_distribution = customtkinter.CTkFrame(master=self.frame_right,width=650,height=250,fg_color=App.darker_bckg)
+        self.frame_distribution.grid(row=0, column=1,padx=5)
         
         # the figure that will contain the plot
         px2in = 0.0104
-        figwidth = self.frame_dataplot.cget('width')
-        figheight = self.frame_dataplot.cget('height')
+        figwidth = self.frame_distribution.cget('width')
+        figheight = self.frame_distribution.cget('height')
         fig = Figure(figsize = (px2in*figwidth, px2in*figheight),
                     facecolor=App.darker_bckg)
 
@@ -101,7 +101,7 @@ class App(customtkinter.CTk):
             # Plot the data
             ax.fill_between(self.results['r'],*self.results['PUncert'].ci(95).T,linewidth=0,color=App.light_green, alpha=0.4)
             ax.fill_between(self.results['r'],*self.results['PUncert'].ci(50).T,linewidth=0,color=App.light_green, alpha=0.4)
-            ax.plot(self.results['r'],self.results['P'],'-', markersize=5,color=App.green)
+            ax.plot(self.results['r'],self.results['P'],'-', linewidth=2,color=App.dark_green)
             ax.set_xlabel('r [nm]')
 
             # Make the top and right spines invisible
@@ -200,6 +200,7 @@ class App(customtkinter.CTk):
                 else: 
                     P = results.P 
                     PUncert = results.PUncert
+                self.textbox.configure(text = results._summary, anchor='w',justify='left',text_font='Consolas 10')
 
                 # Update the plots with the analysis results
                 self.results = {'r':r,'P':P,'PUncert':PUncert,'t':self.data['t'], 'model':results.model}
@@ -246,7 +247,7 @@ class App(customtkinter.CTk):
         if hasattr(self,'frame_dataplot'):
             self.frame_dataplot.destroy()
         
-        self.frame_dataplot = customtkinter.CTkFrame(master=self.frame_right,width=400,height=250,fg_color='#ffffff')
+        self.frame_dataplot = customtkinter.CTkFrame(master=self.frame_right,width=400,height=250,fg_color=App.darker_bckg)
         self.frame_dataplot.grid(row=0, column=0, sticky="")
         
         # the figure that will contain the plot
@@ -418,11 +419,11 @@ class App(customtkinter.CTk):
                                                  width=180,
                                                  fg_color=App.darker_bckg,
                                                  corner_radius=0)
-        self.frame_left.grid(row=0, column=0, padx=20,)
+        self.frame_left.grid(row=0, column=0, padx=10,)
 
         self.frame_right = customtkinter.CTkFrame(master=self,width=800,
                                                  fg_color=App.darker_bckg,)
-        self.frame_right.grid(row=0, column=1, sticky="nswe", padx=20, pady=20)
+        self.frame_right.grid(row=0, column=1, sticky="nswe", padx=10, pady=10)
 
         # ============ frame_left ============
 
@@ -500,7 +501,7 @@ class App(customtkinter.CTk):
         self.plot_distribution()
 
         # ============ frame_modelling ============
-        self.frame_modelling.grid_rowconfigure(9, weight=1)
+        self.frame_modelling.grid_rowconfigure(20, weight=1)
         self.frame_modelling.grid_columnconfigure(0, weight=1)
         self.frame_modelling.grid_columnconfigure(1, weight=1000)
         
@@ -576,38 +577,47 @@ class App(customtkinter.CTk):
         self.rmax_entry.insert(0,'8')
         self.dr_entry.insert(0,'0.05')
 
+        self.Analysis_label = customtkinter.CTkLabel(master=self.frame_modelling, text="Analysis", text_font='Helvetica 14 bold')
+        self.Analysis_label.grid(row=10, column=0, columnspan=2, pady=5, sticky="")
 
-        self.frame_analysis = customtkinter.CTkFrame(master=self.frame_right,width=400,fg_color=App.dark_bckg)
+        self.regparam_frame = customtkinter.CTkFrame(master=self.frame_modelling,width=300,fg_color=App.dark_bckg)
+        self.regparam_frame.grid(row=11, column=0, pady=0, sticky="")
+
+        self.regparam_label = customtkinter.CTkLabel(master=self.regparam_frame, text="Regularization parameter:",width=80)
+        self.regparam_label.grid(row=0, column=0, pady=0, sticky="we")
+        self.regparam_menu = customtkinter.CTkOptionMenu(self.regparam_frame,width=80, values=['AIC','BIC','cAIC','GCV','srGCV','LR','LC'],
+                        dynamic_resizing=False, button_color=App.dark_green,fg_color=App.dark_bckg, dropdown_hover_color=App.green)
+        self.regparam_menu.set('AIC')
+        self.regparam_menu.grid(row=0, column=1, pady=0, padx=5, sticky="we")
+
+        self.compactness_switch = customtkinter.CTkSwitch(master=self.frame_modelling, text="Compactness regularization", onvalue=True, offvalue=False)
+        self.compactness_switch.grid(row=12, column=0, columnspan=2, pady=5, sticky="")
+
+        self.bootstrap_frame = customtkinter.CTkFrame(master=self.frame_modelling,width=300,fg_color=App.dark_bckg)
+        self.bootstrap_frame.grid(row=13, column=0, pady=0, sticky="")
+        self.bootstrap_switch = customtkinter.CTkSwitch(master=self.bootstrap_frame, command=self.bootstrap_switch_samples, text="Bootstrapping", onvalue=True, offvalue=False)
+        self.bootstrap_switch.grid(row=0, column=0, pady=0, sticky="")
+        self.bootstrap_entry = customtkinter.CTkEntry(master=self.bootstrap_frame, width=50, state='disabled')
+        self.bootstrap_entry.grid(row=0, column=1,  padx=5, pady=0, sticky="")
+        self.bootstrap_label = customtkinter.CTkLabel(master=self.bootstrap_frame, text=f"Samples",width=50) 
+        self.bootstrap_label.grid(row=0, column=2,pady=0,sticky='')
+        
+
+
+        self.frame_analysis = customtkinter.CTkFrame(master=self.frame_right,width=650,fg_color=App.dark_bckg)
         self.frame_analysis.grid(row=1, column=1, sticky="nswe", pady=15,  padx=15)
 
         self.frame_analysis.grid_columnconfigure(0, weight=1)
         self.frame_analysis.grid_rowconfigure((0,1,2), weight=1)
 
-        self.Analysis_label = customtkinter.CTkLabel(master=self.frame_analysis, text="Analysis", text_font='Helvetica 14 bold')
-        self.Analysis_label.grid(row=0, column=0, columnspan=2, pady=5, sticky="")
 
-        self.regparam_frame = customtkinter.CTkFrame(master=self.frame_analysis,width=300,fg_color=App.dark_bckg)
-        self.regparam_frame.grid(row=1, column=0, pady=5, sticky="")
+        self.textbox = customtkinter.CTkLabel(self.frame_analysis,text='',width=650, anchor='w')
+        self.textbox.grid(row=1, column=0, padx=10, sticky="news")
 
-        self.regparam_label = customtkinter.CTkLabel(master=self.regparam_frame, text="Regularization parameter:",width=80)
-        self.regparam_label.grid(row=0, column=0, pady=5, sticky="we")
-        self.regparam_menu = customtkinter.CTkOptionMenu(self.regparam_frame,width=80, values=['AIC','BIC','cAIC','GCV','srGCV','LR','LC'],
-                        dynamic_resizing=False, button_color=App.dark_green,fg_color=App.dark_bckg, dropdown_hover_color=App.green)
-        self.regparam_menu.set('AIC')
-        self.regparam_menu.grid(row=0, column=1, pady=5, padx=5, sticky="we")
+        self.logo_image = self.load_image("/graphics/logo.png", 230,50)
+        self.logo_label = customtkinter.CTkLabel(self,image=self.logo_image,width=230, height=50)
+        self.logo_label.place(relx=0.001, rely=0.02, anchor='nw')
 
-        self.compactness_switch = customtkinter.CTkSwitch(master=self.frame_analysis, text="Compactness regularization", onvalue=True, offvalue=False)
-        self.compactness_switch.grid(row=2, column=0, columnspan=2, pady=5, sticky="")
-
-        self.bootstrap_frame = customtkinter.CTkFrame(master=self.frame_analysis,width=300,fg_color=App.dark_bckg)
-        self.bootstrap_frame.grid(row=3, column=0, pady=5, sticky="")
-        self.bootstrap_switch = customtkinter.CTkSwitch(master=self.bootstrap_frame, command=self.bootstrap_switch_samples, text="Bootstrapping", onvalue=True, offvalue=False)
-        self.bootstrap_switch.grid(row=0, column=0, pady=5, sticky="")
-        self.bootstrap_entry = customtkinter.CTkEntry(master=self.bootstrap_frame, width=50, state='disabled')
-        self.bootstrap_entry.grid(row=0, column=1,  padx=5, pady=5, sticky="")
-        self.bootstrap_label = customtkinter.CTkLabel(master=self.bootstrap_frame, text=f"Samples",width=50) 
-        self.bootstrap_label.grid(row=0, column=2,pady=5,sticky='')
-        
     #==============================================================================================================
 
     #==============================================================================================================
@@ -633,9 +643,11 @@ class App(customtkinter.CTk):
     #==============================================================================================================
 
     #==============================================================================================================
-    def load_image(self, path, image_size):
+    def load_image(self, path, image_size, image_size2=None):
+        if image_size2 is None:
+            image_size2 = image_size
         """ load rectangular image with path relative to PATH """
-        return ImageTk.PhotoImage(Image.open(PATH + path).resize((image_size, image_size)))
+        return ImageTk.PhotoImage(Image.open(PATH + path).resize((image_size, image_size2)))
     #==============================================================================================================
 
     #==============================================================================================================
