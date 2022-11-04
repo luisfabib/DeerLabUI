@@ -4,19 +4,24 @@ import customtkinter
 from inspect import getmembers, signature
 import deerlab as dl 
 import threading
-import matplotlib.pyplot as plt 
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
 import numpy as np
 from itertools import cycle
-import time 
+from PIL import Image, ImageTk
+import os 
 
-running = True 
-thread_results = []
+# Path to current file
+PATH = os.path.dirname(os.path.realpath(__file__))
+
+# Global variables for threading
+THREAD_ACTIVE = True 
+THREAD_RETURNS = []
+
+# App theme
 customtkinter.set_appearance_mode("Dark")  # Modes: "System" (standard), "Dark", "Light"
 customtkinter.set_default_color_theme("blue")  # Themes: "blue" (standard), "green", "dark-blue"
 
-from PIL import Image, ImageTk
 
 class App(customtkinter.CTk):
 
@@ -58,30 +63,8 @@ class App(customtkinter.CTk):
             ex_modelnames.append(f'({model_name}) {description}') 
             ex_models.append(model_name)
 
-    def M_95(self,n=0, top=None, lbl=None):
-        # Play GIF (file name = m95.gif) in a 320x320 tkinter window
-        # Play GIF concurrently with the loading animation below
-        # Close tkinter window after play
-        global process_is_alive
 
-        process_is_alive = True
-        num_cycles = 8
-        count = len(self.frames) * num_cycles
-        delay = 8000 // count # make required cycles of animation in around 4 secs
-        if n == 0:
-            #self.withdraw()
-            self.lbl = tkinter.Label(master=self.frame_left, image=self.frames[0], width=160, height=80)
-            self.lbl.grid(row=5, column=0)
-            process_is_alive = True
-            self.lbl.after(delay, self.M_95, n+1, top, self.lbl)
-        elif n < count-1:
-            self.lbl.config(image=self.frames[n%len(self.frames)])
-            self.lbl.after(delay, self.M_95, n+1, top, self.lbl)
-        else:
-            self.lbl.destroy()
-            process_is_alive = False
-
-
+    #==============================================================================================================
     def plot_distribution(self):
             
         if hasattr(self,'frame_distribution'):
@@ -128,12 +111,20 @@ class App(customtkinter.CTk):
         self.data_plot = FigureCanvasTkAgg(fig, master=self.frame_distribution)  
         self.data_plot.draw()
         self.data_plot.get_tk_widget().pack()
+    #==============================================================================================================
 
 
+
+    #==============================================================================================================
     def run_analysis(self):
 
-        global process_is_alive
+        global THREAD_ACTIVE, THREAD_RETURNS
 
+        # Disable main menu buttons during execution
+        self.run_button.configure(text='Running...', state='disabled')
+        self.load_button.configure(state='disabled')
+
+        # Get the selection of models 
         ex_model = getattr(dl,[ex_model for ex_model in App.ex_models if ex_model in self.Exmodel_menu.get()][0])     
         bg_model = getattr(dl,[bg_model for bg_model in App.bg_models if bg_model in self.Bmodel_menu.get()][0])        
         dd_model = [dd_model for dd_model in App.dd_models if dd_model in self.Pmodel_menu.get()][0]   
@@ -148,29 +139,39 @@ class App(customtkinter.CTk):
         dr = float(self.dr_entry.get())            
         r = np.arange(rmin,rmax,dr)
 
+        # Adjust the time vector by the specified deadtime
         t = self.data['t']
         t = t - t[0] + float(self.deadtime_entry.get())
         self.data['t'] = t
 
-        # Construct experiment model 
+        # Construct the experiment model 
         taus = [float(getattr(self,f"delay{n+1}_entry").get()) for n in range(self.Ndelays)]
         pathways = [n+1 for n in range(self.Npathways) if bool(getattr(self,f'pathway{n+1}_switch').get())]
         experiment = ex_model(*taus,pathways=pathways)
 
+        # Construct the dipolar model
         Vmodel = dl.dipolarmodel(self.data['t'],r,Pmodel=dd_model, Bmodel=bg_model, experiment=experiment)
 
-        cancel_id = None
-        loading_label = customtkinter.CTkLabel(master=self.frame_left, width=16, height=8, bg_color=App.darker_bckg)
-        loading_label.grid(row=5, column=0)
-        def start_loading():
-            global running
-            global thread_results
-            if running:  # Animation not started?
-                loading_label.configure(image=next(self.frames))
-                app.after(10, start_loading) # call this function every 100ms
+        # Construct a canvas to put the runtime animation
+        animation_canvas = tkinter.Canvas(master=self.frame_left, width=180, height=60, bg=App.darker_bckg, highlightthickness=0)
+        animation_canvas.grid(row=5, column=0)
+
+        #--------------------------------------------------------------------------------------------------
+        def animated_wait_for_results():
+
+            global THREAD_ACTIVE, THREAD_RETURNS
+
+            # Check if the analysis thread is still active 
+            if THREAD_ACTIVE:
+                # If still running, keep on updating the animation
+                animation_canvas.create_image(0,0,image=next(self.frames),anchor='nw')
+                app.after(50, animated_wait_for_results) # Animation update every 50ms
             else:  
-                loading_label.destroy()       
-                results = thread_results[0]
+                # If finished, stop the animation and retrieve the output of the analysis 
+                animation_canvas.destroy()       
+                results = THREAD_RETURNS[0]
+                
+                # Evaluate the distance distribution estimate and uncertainty
                 if not hasattr(results,'P'):
                     P = results.evaluate(dd_model,r)
                     PUncert = results.propagate(dd_model,r,lb=np.zeros_like(r)) 
@@ -178,25 +179,44 @@ class App(customtkinter.CTk):
                     P = results.P 
                     PUncert = results.PUncert
 
+                # Update the plots with the analysis results
                 self.results = {'r':r,'P':P,'PUncert':PUncert,'t':self.data['t'], 'model':results.model}
                 self.plot_distribution()
                 self.plot_data()
+                # Reactivate the main menu buttons
+                self.run_button.configure(text='Run analysis', state='normal')
+                self.load_button.configure(state='normal')
+                return # Finish the analysis and return to mainloop()
+        #--------------------------------------------------------------------------------------------------
 
-        def loadingAnimation():
-            global running
-            global thread_results
-            running = True
-            print('Running')
+        #--------------------------------------------------------------------------------------------------
+        def threaded_analysis():
+            
+            global THREAD_ACTIVE, THREAD_RETURNS
+            
+            # Set thread status as active
+            THREAD_ACTIVE = True
+            
+            # Fit the dipolar model to the data
             results = dl.fit(Vmodel,self.data['data'])
-            print('Finished')
-            running = False
-            thread_results.append(results) 
- 
-        threading.Thread(target=loadingAnimation).start()
-        start_loading()
+            
+            # Pack results to be extracted outside the thread
+            THREAD_RETURNS.append(results) 
 
-        return
+            # Set status of the thread to inactive before killing it
+            THREAD_ACTIVE = False
+        #--------------------------------------------------------------------------------------------------
+    
+        # Prepare container for thread outputs
+        THREAD_RETURNS = []
+        # Start analysis on a separate thread
+        threading.Thread(target=threaded_analysis).start()
+        # Run an animation while waiting for the results to finish 
+        animated_wait_for_results()
+    #==============================================================================================================
 
+
+    #==============================================================================================================
     def plot_data(self):
 
             
@@ -248,19 +268,42 @@ class App(customtkinter.CTk):
         self.data_plot = FigureCanvasTkAgg(fig, master=self.frame_dataplot)  
         self.data_plot.draw()
         self.data_plot.get_tk_widget().pack()
+    #==============================================================================================================
 
 
+    #==============================================================================================================
     def load_file(self):
+
+        # Us the OS dialog window to select a file
         file = filedialog.askopenfilename()
+
+        # Load the file with DeerLab
         t,Vexp = dl.deerload(file)
+
+        # Phase correction
         Vexp = dl.correctphase(Vexp,offset=True) 
         Vexp = Vexp/max(Vexp)
+
+        # Adjust time axis
         t = t - t[0]
+
+        # If there are already results from a previous dataset, delete them
+        if hasattr(self,'results'):
+            delattr(self,'results')
+ 
+        # Store experimental data into the app
         self.data = {'t':t, 'data':Vexp}
+
+        # Update the data and results displays
         self.plot_data()
+        self.plot_distribution()
+
+        # Enable the analysis button 
         self.run_button.configure(state='normal')
+    #==============================================================================================================
 
 
+    #==============================================================================================================
     def setup_pulsedelays(self,ex_modelname):
         for n in range(5):
             try:
@@ -282,8 +325,10 @@ class App(customtkinter.CTk):
             setattr(self,f"delay{n+1}_entry", customtkinter.CTkEntry(master=self.frame_pulsedelays, placeholder_text="us",width=50) )
             getattr(self,f"delay{n+1}_entry").grid(row=1, column=ncol,padx=5,sticky='we')
             ncol += 1
+    #==============================================================================================================
 
 
+    #==============================================================================================================
     def setup_pathways(self,ex_modelname):
         ex_model = [ex_model for ex_model in App.ex_models if ex_model in ex_modelname ][0]        
         sig = signature(getattr(dl,ex_model))
@@ -306,31 +351,34 @@ class App(customtkinter.CTk):
                 nrow = 1
                 ncol = 0
         self.pathway1_switch.select()
+    #==============================================================================================================
 
+
+    #==============================================================================================================
     def change_experiment(self,ex_model):
         self.setup_pulsedelays(ex_model)
         self.setup_pathways(ex_model)
+    #==============================================================================================================
 
+
+
+    #==============================================================================================================
     def __init__(self):
         super().__init__()
 
-        self.title("CustomTkinter complex_example.py")
+        self.title("DeerLab UI - Dipolar EPR spectroscopy")
         self.geometry(f"{App.WIDTH}x{App.HEIGHT}")
         self.protocol("WM_DELETE_WINDOW", self.on_closing)  # call .on_closing() when app gets closed
 
-
+        # Load the animation GIF into the UI's memory
         frames = []
-        im = Image.open(r"D:\lufa\projects\DeerLab\testing\GIF4.gif")
+        im = Image.open(PATH + "\graphics\loading.gif")
         for frame in range(im.n_frames):
-            image = im.seek(frame)
-            # For each pixel in the image
-            for i in range(image.size[0]):
-                for j in range(image.size[1]):
-                    # If the pixel is white
-                    if pixels[i, j] == (255, 255, 255, 255):
-                        # Make it transparent
-                        pixels[i, j] = (255, 255, 255, 0)
-            frames.append(ImageTk.PhotoImage(im.convert('RGBA').resize((160, 80))))
+            # Get current frame
+            im.seek(frame)
+            # Process frame
+            frames.append(ImageTk.PhotoImage(im.convert('RGBA').resize((180, 60))))
+        # Construct looped generator for the GIF frames
         frames_cycle=cycle(frames)
         self.frames = frames_cycle
 
@@ -357,14 +405,14 @@ class App(customtkinter.CTk):
         self.frame_left.grid_rowconfigure(11, minsize=10)  # empty row with minsize as spacing
 
         self.label_1 = customtkinter.CTkLabel(master=self.frame_left,
-                                              text="CustomTkinter",
+                                              text="Main Menu",
                                               text_font=("Roboto Medium", -16))  # font name and size in px
         self.label_1.grid(row=1, column=0, pady=10, padx=10)
 
-        self.button_1 = customtkinter.CTkButton(master=self.frame_left,
+        self.load_button = customtkinter.CTkButton(master=self.frame_left,
                                                 text="Load file",
                                                 command=self.load_file)
-        self.button_1.grid(row=2, column=0, pady=10, padx=20)
+        self.load_button.grid(row=2, column=0, pady=10, padx=20)
 
         self.button_2 = customtkinter.CTkButton(master=self.frame_left,
                                                 state = 'disabled',
@@ -378,13 +426,10 @@ class App(customtkinter.CTk):
                                                 command=self.run_analysis)
         self.run_button.grid(row=4, column=0, pady=10, padx=20)
 
-        self.label_mode = customtkinter.CTkLabel(master=self.frame_left, text="Appearance Mode:")
-        self.label_mode.grid(row=9, column=0, pady=0, padx=20, sticky="w")
-
-        self.optionmenu_1 = customtkinter.CTkOptionMenu(master=self.frame_left,
-                                                        values=["Light", "Dark", "System"],
-                                                        command=self.change_appearance_mode)
-        self.optionmenu_1.grid(row=10, column=0, pady=10, padx=20, sticky="w")
+        #self.label_mode = customtkinter.CTkLabel(master=self.frame_left, text="Appearance Mode:")
+        #self.label_mode.grid(row=9, column=0, pady=0, padx=20, sticky="w")
+        #self.optionmenu_1 = customtkinter.CTkOptionMenu(master=self.frame_left,values=["Light", "Dark", "System"],command=self.change_appearance_mode)
+        #self.optionmenu_1.grid(row=10, column=0, pady=10, padx=20, sticky="w")
 
         # ============ frame_right ============
 
@@ -466,16 +511,25 @@ class App(customtkinter.CTk):
         self.rmin_entry.insert(0,'1.5')
         self.rmax_entry.insert(0,'8')
         self.dr_entry.insert(0,'0.05')
+    #==============================================================================================================
+
+
+    #==============================================================================================================
     def button_event(self):
         print("Button pressed")
+    #==============================================================================================================
 
+    #==============================================================================================================
     def change_appearance_mode(self, new_appearance_mode):
         customtkinter.set_appearance_mode(new_appearance_mode)
+    #==============================================================================================================
 
+    #==============================================================================================================
     def on_closing(self, event=0):
         self.destroy()
-
+    #==============================================================================================================
 
 if __name__ == "__main__":
     app = App()
+    app.iconbitmap(PATH + "\graphics\\favicon.ico")
     app.mainloop()
