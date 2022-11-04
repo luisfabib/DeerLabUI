@@ -20,7 +20,7 @@ THREAD_RETURNS = []
 
 # App theme
 customtkinter.set_appearance_mode("Dark")  # Modes: "System" (standard), "Dark", "Light"
-customtkinter.set_default_color_theme("blue")  # Themes: "blue" (standard), "green", "dark-blue"
+customtkinter.set_default_color_theme("green")  # Themes: "blue" (standard), "green", "dark-blue"
 
 
 class App(customtkinter.CTk):
@@ -28,11 +28,21 @@ class App(customtkinter.CTk):
     WIDTH = 1100
     HEIGHT = 700
         
+    darker_bckg = '#232937'
+    dark_bckg = '#393e4b'
+    dark_txt = '#afb6be'
+
     darker_bckg = '#2a2d2e'
     dark_bckg = '#343638'
     dark_txt = '#afb6be'
     blue = '#1f6aa5'
+    magenta = '#df4577'
+    orange = '#d7a064'
+    light_green = '#27e8a7'
+    green = '#11b384'
+    dark_green = '#43675b'
 
+    switchcolor = green
 
     dd_modelnames = ['(None) Non-parametric distance distribution']
     dd_models = ['None']
@@ -89,21 +99,23 @@ class App(customtkinter.CTk):
         if hasattr(self,'results'): 
 
             # Plot the data
-            ax.plot(self.results['r'],self.results['P'],'-',color=App.blue, markersize=5)
-            ax.fill_between(self.results['r'],*self.results['PUncert'].ci(95).T,linewidth=0,color=App.blue, alpha=0.5)
-            ax.set_ylabel('P(r) [1/nm]')
+            ax.fill_between(self.results['r'],*self.results['PUncert'].ci(95).T,linewidth=0,color=App.light_green, alpha=0.4)
+            ax.fill_between(self.results['r'],*self.results['PUncert'].ci(50).T,linewidth=0,color=App.light_green, alpha=0.4)
+            ax.plot(self.results['r'],self.results['P'],'-', markersize=5,color=App.green)
             ax.set_xlabel('r [nm]')
 
             # Make the top and right spines invisible
-            ax.spines[['top', 'right']].set_visible(False)
+            ax.spines[['top', 'right','left']].set_visible(False)
 
             # Set color of axes
-            for axis in ['bottom','top','right','left']:
+            for axis in ['bottom']:
                 ax.spines[axis].set_color(App.dark_txt)
                 ax.spines[axis].set_linewidth(1.5)
             ax.xaxis.label.set_color(App.dark_txt)
-            ax.yaxis.label.set_color(App.dark_txt)
+            ax.tick_params(left = False, right = False , labelleft = False)
             ax.tick_params(colors=App.dark_txt, which='both') 
+            ax.tick_params(colors=App.dark_txt, which='both') 
+            ax.autoscale(enable=True, axis='both', tight=True)
         else: 
             ax.text(0.4,0.5,'No results',color=App.dark_txt)
             ax.axis('off')
@@ -152,6 +164,16 @@ class App(customtkinter.CTk):
         # Construct the dipolar model
         Vmodel = dl.dipolarmodel(self.data['t'],r,Pmodel=dd_model, Bmodel=bg_model, experiment=experiment)
 
+        # Get options for the analysis 
+        regparam = self.regparam_menu.get().lower()
+        if self.compactness_switch.get():
+            compactness = dl.dipolarpenalty(dd_model,r,'compactness')
+        else:
+            compactness = None
+        if self.bootstrap_switch.get():
+            bootstrap = int(self.bootstrap_entry.get())
+        else:
+            bootstrap = 0
         # Construct a canvas to put the runtime animation
         animation_canvas = tkinter.Canvas(master=self.frame_left, width=180, height=60, bg=App.darker_bckg, highlightthickness=0)
         animation_canvas.grid(row=5, column=0)
@@ -198,7 +220,8 @@ class App(customtkinter.CTk):
             THREAD_ACTIVE = True
             
             # Fit the dipolar model to the data
-            results = dl.fit(Vmodel,self.data['data'])
+            results = dl.fit(Vmodel,self.data['data'], 
+                        regparam=regparam, penalties=compactness, bootstrap=bootstrap)
             
             # Pack results to be extracted outside the thread
             THREAD_RETURNS.append(results) 
@@ -242,13 +265,13 @@ class App(customtkinter.CTk):
         if hasattr(self,'data'): 
 
             # Plot the data
-            ax.plot(self.data['t'],self.data['data'],'.',color=App.dark_txt, markersize=5)
+            ax.plot(self.data['t'],self.data['data'],'.',color=App.dark_green, markersize=5)
 
             if hasattr(self,'results'): 
-                ax.plot(self.results['t'],self.results['model'],'-',color=App.blue, linewidth=3)
+                ax.plot(self.results['t'],self.results['model'],'-',color=App.green, linewidth=2.5)
 
             ax.set_ylabel('V(t) [arb.u.]')
-            ax.set_xlabel('t [us]')
+            ax.set_xlabel('t [μs]')
 
             # Make the top and right spines invisible
             ax.spines[['top', 'right']].set_visible(False)
@@ -298,8 +321,10 @@ class App(customtkinter.CTk):
         self.plot_data()
         self.plot_distribution()
 
-        # Enable the analysis button 
+        # Enable the dependent buttons 
         self.run_button.configure(state='normal')
+        self.autodistances_button.configure(state='normal')
+
     #==============================================================================================================
 
 
@@ -368,8 +393,9 @@ class App(customtkinter.CTk):
 
         self.title("DeerLab UI - Dipolar EPR spectroscopy")
         self.geometry(f"{App.WIDTH}x{App.HEIGHT}")
+        self.configure(bg='#151921')
         self.protocol("WM_DELETE_WINDOW", self.on_closing)  # call .on_closing() when app gets closed
-
+                
         # Load the animation GIF into the UI's memory
         frames = []
         im = Image.open(PATH + "\graphics\loading.gif")
@@ -390,10 +416,12 @@ class App(customtkinter.CTk):
 
         self.frame_left = customtkinter.CTkFrame(master=self,
                                                  width=180,
+                                                 fg_color=App.darker_bckg,
                                                  corner_radius=0)
-        self.frame_left.grid(row=0, column=0)
+        self.frame_left.grid(row=0, column=0, padx=20,)
 
-        self.frame_right = customtkinter.CTkFrame(master=self,width=800)
+        self.frame_right = customtkinter.CTkFrame(master=self,width=800,
+                                                 fg_color=App.darker_bckg,)
         self.frame_right.grid(row=0, column=1, sticky="nswe", padx=20, pady=20)
 
         # ============ frame_left ============
@@ -409,22 +437,50 @@ class App(customtkinter.CTk):
                                               text_font=("Roboto Medium", -16))  # font name and size in px
         self.label_1.grid(row=1, column=0, pady=10, padx=10)
 
+        self.load_button_image = self.load_image("/graphics/folder.png", 30)
         self.load_button = customtkinter.CTkButton(master=self.frame_left,
-                                                text="Load file",
+                                                text="Load dataset",
+                                                height=40,
+                                                image=self.load_button_image,
+                                                compound="right",
+                                                fg_color=App.magenta,
+                                                hover_color='#7d3634',
                                                 command=self.load_file)
         self.load_button.grid(row=2, column=0, pady=10, padx=20)
 
-        self.button_2 = customtkinter.CTkButton(master=self.frame_left,
+        self.script_button_image = self.load_image("/graphics/script.png", 40)
+        self.script_button = customtkinter.CTkButton(master=self.frame_left,
                                                 state = 'disabled',
-                                                text="Generate script",
-                                                command=self.button_event)
-        self.button_2.grid(row=3, column=0, pady=10, padx=20)
+                                                text="Script",
+                                                height=40,
+                                                fg_color='#656565',
+                                                image=self.script_button_image,
+                                                compound="right",
+                                                command=None)
+        self.script_button.grid(row=11, column=0, pady=10, padx=20)
 
+
+        self.report_button_image = self.load_image("/graphics/report.png", 30)
+        self.report_button = customtkinter.CTkButton(master=self.frame_left,
+                                                state = 'disabled',
+                                                text="Report",
+                                                height=40,
+                                                fg_color='#656565',
+                                                image=self.report_button_image,
+                                                compound="right",
+                                                command=None)
+        self.report_button.grid(row=12, column=0, pady=10, padx=20)
+
+        self.run_button_image = self.load_image("/graphics/run.png", 30)
         self.run_button = customtkinter.CTkButton(master=self.frame_left,
                                                 state = 'disabled',
                                                 text="Run analysis",
+                                                height=40,
+                                                fg_color=App.green,
+                                                image=self.run_button_image,
+                                                compound="right",
                                                 command=self.run_analysis)
-        self.run_button.grid(row=4, column=0, pady=10, padx=20)
+        self.run_button.grid(row=3, column=0, pady=10, padx=20)
 
         #self.label_mode = customtkinter.CTkLabel(master=self.frame_left, text="Appearance Mode:")
         #self.label_mode.grid(row=9, column=0, pady=0, padx=20, sticky="w")
@@ -437,40 +493,45 @@ class App(customtkinter.CTk):
         self.frame_right.grid_rowconfigure((0, 1), weight=1)
         self.frame_right.grid_columnconfigure((0, 1), weight=1)
 
-
         self.frame_modelling = customtkinter.CTkFrame(master=self.frame_right,width=400,fg_color=App.dark_bckg)
-        self.frame_modelling.grid(row=1, column=0, sticky="", pady=15)
-
-        self.frame_analysis = customtkinter.CTkFrame(master=self.frame_right,width=400,fg_color=App.darker_bckg)
-        self.frame_analysis.grid(row=1, column=1, sticky="")
+        self.frame_modelling.grid(row=1, column=0, sticky="nswe", pady=15,  padx=15)
 
         self.plot_data()
         self.plot_distribution()
+
         # ============ frame_modelling ============
         self.frame_modelling.grid_rowconfigure(9, weight=1)
         self.frame_modelling.grid_columnconfigure(0, weight=1)
         self.frame_modelling.grid_columnconfigure(1, weight=1000)
         
         self.Modelling_label = customtkinter.CTkLabel(master=self.frame_modelling, text="Modelling", text_font='Helvetica 14 bold')
-        self.Modelling_label.grid(row=0, column=0, columnspan=2, pady=10, sticky="we")
+        self.Modelling_label.grid(row=0, column=0, pady=10, sticky="we")
 
-        self.Pmodel_label = customtkinter.CTkLabel(master=self.frame_modelling, text="Distribution:",width=50)
-        self.Pmodel_label.grid(row=1, column=0, pady=5, padx=15, sticky="we")
-        self.Pmodel_menu = customtkinter.CTkOptionMenu(self.frame_modelling,width=250, values=App.dd_modelnames,dynamic_resizing=False)
+        self.frame_models = customtkinter.CTkFrame(master=self.frame_modelling,width=400,fg_color=App.dark_bckg)
+        self.frame_models.grid(row=1, column=0, sticky="we", pady=0,  padx=15)
+
+
+        self.Pmodel_label = customtkinter.CTkLabel(master=self.frame_models, text="Distribution:",width=50)
+        self.Pmodel_label.grid(row=0, column=0, pady=5, sticky="we")
+        self.Pmodel_menu = customtkinter.CTkOptionMenu(self.frame_models,width=280, values=App.dd_modelnames,
+                        dynamic_resizing=False, button_color=App.dark_green, fg_color=App.dark_bckg, dropdown_hover_color=App.green)
         self.Pmodel_menu.set(App.dd_modelnames[0])
-        self.Pmodel_menu.grid(row=1, column=1, pady=5, padx=10, sticky="we")
+        self.Pmodel_menu.grid(row=0, column=1, pady=5, padx=5, sticky="we")
 
-        self.Bmodel_label = customtkinter.CTkLabel(master=self.frame_modelling, text="Background:",width=50)
-        self.Bmodel_label.grid(row=2, column=0, pady=5, padx=15, sticky="we")
-        self.Bmodel_menu = customtkinter.CTkOptionMenu(self.frame_modelling,width=250, values=App.bg_modelnames,dynamic_resizing=False)
+        self.Bmodel_label = customtkinter.CTkLabel(master=self.frame_models, text="Background:",width=50)
+        self.Bmodel_label.grid(row=1, column=0, pady=5, sticky="we")
+        self.Bmodel_menu = customtkinter.CTkOptionMenu(self.frame_models,width=280, values=App.bg_modelnames,
+                        dynamic_resizing=False, button_color=App.dark_green,fg_color=App.dark_bckg, dropdown_hover_color=App.green)
         self.Bmodel_menu.set(App.bg_modelnames[1])
-        self.Bmodel_menu.grid(row=2, column=1, pady=5, padx=10, sticky="we")
+        self.Bmodel_menu.grid(row=1, column=1, pady=5, padx=5, sticky="we")
 
-        self.Exmodel_label = customtkinter.CTkLabel(master=self.frame_modelling, text="Experiment:",width=50)
-        self.Exmodel_label.grid(row=3, column=0, pady=5, padx=15, sticky="we")
-        self.Exmodel_menu = customtkinter.CTkOptionMenu(self.frame_modelling,width=250, values=App.ex_modelnames,dynamic_resizing=False,command=self.change_experiment)
+        self.Exmodel_label = customtkinter.CTkLabel(master=self.frame_models, text="Experiment:",width=50)
+        self.Exmodel_label.grid(row=2, column=0, pady=5, sticky="we")
+        self.Exmodel_menu = customtkinter.CTkOptionMenu(self.frame_models,width=280, values=App.ex_modelnames,
+                        dynamic_resizing=False,button_color=App.dark_green, fg_color=App.dark_bckg, dropdown_hover_color=App.green,
+                        command=self.change_experiment)
         self.Exmodel_menu.set(App.ex_modelnames[1])
-        self.Exmodel_menu.grid(row=3, column=1, pady=5, padx=10, sticky="we")
+        self.Exmodel_menu.grid(row=2, column=1, pady=5, padx=5, sticky="we")
 
 
         self.frame_pulsedelays = customtkinter.CTkFrame(master=self.frame_modelling,fg_color=App.dark_bckg)
@@ -487,36 +548,94 @@ class App(customtkinter.CTk):
 
         self.setup_pathways('ex_4pdeer') 
 
-
         self.frame_distances = customtkinter.CTkFrame(master=self.frame_modelling,fg_color=App.dark_bckg)
         self.frame_distances.grid(row=9, column=0, columnspan=2)
-
 
         self.distances_label = customtkinter.CTkLabel(master=self.frame_distances, text="Distance range",width=70)
         self.distances_label.grid(row=1, column=0, rowspan=2,  pady=2, sticky="we")
 
-        self.rmin_label = customtkinter.CTkLabel(master=self.frame_distances, text=f"min.",width=70) 
+        self.rmin_label = customtkinter.CTkLabel(master=self.frame_distances, text=f"min.",width=50) 
         self.rmin_label.grid(row=0, column=1,padx=5,sticky='we')
-        self.rmin_entry = customtkinter.CTkEntry(master=self.frame_distances, placeholder_text="nm",width=70)
+        self.rmin_entry = customtkinter.CTkEntry(master=self.frame_distances, placeholder_text="nm",width=50)
         self.rmin_entry.grid(row=1, column=1,padx=5,sticky='we')
-        self.rmax_label = customtkinter.CTkLabel(master=self.frame_distances, text=f"max.",width=70) 
+        self.rmax_label = customtkinter.CTkLabel(master=self.frame_distances, text=f"max.",width=50) 
         self.rmax_label.grid(row=0, column=2,padx=5,sticky='we')
-        self.rmax_entry = customtkinter.CTkEntry(master=self.frame_distances, placeholder_text="nm",width=70)
+        self.rmax_entry = customtkinter.CTkEntry(master=self.frame_distances, placeholder_text="nm",width=50)
         self.rmax_entry.grid(row=1, column=2,padx=5,sticky='we')
-        self.dr_label = customtkinter.CTkLabel(master=self.frame_distances, text=f"resolution",width=70) 
+        self.dr_label = customtkinter.CTkLabel(master=self.frame_distances, text=f"resolution",width=50) 
         self.dr_label.grid(row=0, column=3,padx=5,sticky='wes')
-        self.dr_entry = customtkinter.CTkEntry(master=self.frame_distances, placeholder_text="nm",width=70)
+        self.dr_entry = customtkinter.CTkEntry(master=self.frame_distances, placeholder_text="nm",width=50)
         self.dr_entry.grid(row=1, column=3,padx=5,sticky='we')
-
+        self.autodistances_button = customtkinter.CTkButton(master=self.frame_distances,
+                                                            state = 'disableds',
+                                                            width=50,
+                                                            text="auto",
+                                                            command=self.automatic_distances)
+        self.autodistances_button.grid(row=1, column=4, rowspan=2,  pady=2, sticky="we")
         self.rmin_entry.insert(0,'1.5')
         self.rmax_entry.insert(0,'8')
         self.dr_entry.insert(0,'0.05')
+
+
+        self.frame_analysis = customtkinter.CTkFrame(master=self.frame_right,width=400,fg_color=App.dark_bckg)
+        self.frame_analysis.grid(row=1, column=1, sticky="nswe", pady=15,  padx=15)
+
+        self.frame_analysis.grid_columnconfigure(0, weight=1)
+        self.frame_analysis.grid_rowconfigure((0,1,2), weight=1)
+
+        self.Analysis_label = customtkinter.CTkLabel(master=self.frame_analysis, text="Analysis", text_font='Helvetica 14 bold')
+        self.Analysis_label.grid(row=0, column=0, columnspan=2, pady=5, sticky="")
+
+        self.regparam_frame = customtkinter.CTkFrame(master=self.frame_analysis,width=300,fg_color=App.dark_bckg)
+        self.regparam_frame.grid(row=1, column=0, pady=5, sticky="")
+
+        self.regparam_label = customtkinter.CTkLabel(master=self.regparam_frame, text="Regularization parameter:",width=80)
+        self.regparam_label.grid(row=0, column=0, pady=5, sticky="we")
+        self.regparam_menu = customtkinter.CTkOptionMenu(self.regparam_frame,width=80, values=['AIC','BIC','cAIC','GCV','srGCV','LR','LC'],
+                        dynamic_resizing=False, button_color=App.dark_green,fg_color=App.dark_bckg, dropdown_hover_color=App.green)
+        self.regparam_menu.set('AIC')
+        self.regparam_menu.grid(row=0, column=1, pady=5, padx=5, sticky="we")
+
+        self.compactness_switch = customtkinter.CTkSwitch(master=self.frame_analysis, text="Compactness regularization", onvalue=True, offvalue=False)
+        self.compactness_switch.grid(row=2, column=0, columnspan=2, pady=5, sticky="")
+
+        self.bootstrap_frame = customtkinter.CTkFrame(master=self.frame_analysis,width=300,fg_color=App.dark_bckg)
+        self.bootstrap_frame.grid(row=3, column=0, pady=5, sticky="")
+        self.bootstrap_switch = customtkinter.CTkSwitch(master=self.bootstrap_frame, command=self.bootstrap_switch_samples, text="Bootstrapping", onvalue=True, offvalue=False)
+        self.bootstrap_switch.grid(row=0, column=0, pady=5, sticky="")
+        self.bootstrap_entry = customtkinter.CTkEntry(master=self.bootstrap_frame, width=50, state='disabled')
+        self.bootstrap_entry.grid(row=0, column=1,  padx=5, pady=5, sticky="")
+        self.bootstrap_label = customtkinter.CTkLabel(master=self.bootstrap_frame, text=f"Samples",width=50) 
+        self.bootstrap_label.grid(row=0, column=2,pady=5,sticky='')
+        
+    #==============================================================================================================
+
+    #==============================================================================================================
+    def bootstrap_switch_samples(self):
+        if self.bootstrap_switch.get():
+            self.bootstrap_entry.configure(state='normal')
+            self.bootstrap_entry.insert(0,'500')
+        else: 
+            self.bootstrap_entry.delete(0, len(self.bootstrap_entry.get()))
+            self.bootstrap_entry.configure(state='disabled')
     #==============================================================================================================
 
 
     #==============================================================================================================
-    def button_event(self):
-        print("Button pressed")
+    def automatic_distances(self):
+        rmin,rmax = dl.distancerange(self.data['t'])
+        # Delete current entries
+        self.rmin_entry.delete(0, len(self.rmin_entry.get()))
+        self.rmax_entry.delete(0, len(self.rmax_entry.get()))
+        # Enter new entries
+        self.rmin_entry.insert(0,str(np.round(rmin,2)))
+        self.rmax_entry.insert(0,str(np.round(rmax,2)))
+    #==============================================================================================================
+
+    #==============================================================================================================
+    def load_image(self, path, image_size):
+        """ load rectangular image with path relative to PATH """
+        return ImageTk.PhotoImage(Image.open(PATH + path).resize((image_size, image_size)))
     #==============================================================================================================
 
     #==============================================================================================================
