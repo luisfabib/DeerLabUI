@@ -730,10 +730,22 @@ r = np.arange({rmin},{rmax},{dr}) # nm
 
 # Construct the model
 experiment = dl.{ex_model}({','.join([f'tau{n+1}' for n in range(self.Ndelays)])}, pathways={[n+1 for n in range(self.Npathways) if bool(getattr(self,f'pathway{n+1}_switch').get())]})
-Vmodel = dl.dipolarmodel(t,r,Pmodel={dd_model},Bmodel=dl.{bg_model}, experiment=experiment)
+Vmodel = dl.dipolarmodel(t,r,Pmodel={dd_model},Bmodel=dl.{bg_model}, experiment=experiment) \n"""
+        
+        fitargs = ['Vmodel','Vexp'] 
+        regparam = self.regparam_menu.get().lower()
+        fitargs.append(f'regparam={regparam}')
+        if self.compactness_switch.get():
+            scripte += f"dl.dipolarpenalty({dd_model},r,'compactness') \n"
+            fitargs.append(f'penalties=compactness')
+        if self.bootstrap_switch.get():
+            bootstrap = int(self.bootstrap_entry.get())
+            fitargs.append(f'bootstrap={bootstrap}')
 
+
+        script += f""""
 # Fit the model to the data
-results = dl.fit(Vmodel,Vexp)
+results = dl.fit({','.join(fitargs)})
 
 # Print results summary
 print(results)
