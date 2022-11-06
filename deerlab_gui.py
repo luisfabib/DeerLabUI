@@ -200,15 +200,21 @@ class App(customtkinter.CTk):
                 else: 
                     P = results.P 
                     PUncert = results.PUncert
-                self.textbox.configure(text = results._summary, anchor='w',justify='left',text_font='Consolas 10')
+
+                # Clear output console
+                self.textbox.delete('1.0', tkinter.END)
+                # Print results summary table
+                self.textbox.insert(tkinter.INSERT,results._summary)
 
                 # Update the plots with the analysis results
                 self.results = {'r':r,'P':P,'PUncert':PUncert,'t':self.data['t'], 'model':results.model}
                 self.plot_distribution()
                 self.plot_data()
+
                 # Reactivate the main menu buttons
                 self.run_button.configure(text='Run analysis', state='normal')
                 self.load_button.configure(state='normal')
+
                 return # Finish the analysis and return to mainloop()
         #--------------------------------------------------------------------------------------------------
 
@@ -605,15 +611,30 @@ class App(customtkinter.CTk):
         
 
 
-        self.frame_analysis = customtkinter.CTkFrame(master=self.frame_right,width=650,fg_color=App.dark_bckg)
-        self.frame_analysis.grid(row=1, column=1, sticky="sn", pady=(0,10),  padx=10)
+        self.frame_results = customtkinter.CTkFrame(master=self.frame_right,width=650,fg_color=App.dark_bckg)
+        self.frame_results.grid(row=1, column=1, sticky="news", pady=(0,10),  padx=10)
+        self.frame_results.grid_columnconfigure(0, weight=1)
+        self.frame_results.grid_rowconfigure((1), weight=10)
 
-        self.frame_analysis.grid_columnconfigure(0, weight=1)
-        self.frame_analysis.grid_rowconfigure((0,1,2), weight=1)
 
+        self.Results_label = customtkinter.CTkLabel(master=self.frame_results, text="Results", text_font='Helvetica 14 bold')
+        self.Results_label.grid(row=0, column=0, pady=(10,0), sticky="n")
 
-        self.textbox = customtkinter.CTkLabel(self.frame_analysis,text='',width=650, anchor='w')
-        self.textbox.grid(row=1, column=0, padx=10, sticky="news")
+        self.frame_textbox = customtkinter.CTkFrame(master=self.frame_results,width=650,fg_color=App.dark_bckg)
+        self.frame_textbox.grid(row=1, column=0, sticky="news")
+        self.frame_textbox.grid_rowconfigure(0, weight=10)
+        self.frame_textbox.grid_columnconfigure(0, weight=1)
+
+        # create scrollable textbox
+        self.textbox = tkinter.Text(self.frame_textbox, highlightthickness=0,bg=App.dark_bckg,font='Consolas 10', relief='flat', fg=App.dark_txt, wrap='none')
+        self.textbox.grid(row=0, column=0, padx=10, sticky="news")
+        self.textbox_scrollbar = customtkinter.CTkScrollbar(self.frame_textbox, command=self.textbox.yview)
+        self.textbox_scrollbar.grid(row=0, column=1, sticky="ns")
+        self.textbox_scrollbarx = customtkinter.CTkScrollbar(self.frame_textbox, command=self.textbox.xview, orientation='horizontal')
+        self.textbox_scrollbarx.grid(row=1, columnspan=2, sticky="we")
+
+        # connect textbox scroll event to CTk scrollbar
+        self.textbox.configure(yscrollcommand=self.textbox_scrollbar.set,xscrollcommand=self.textbox_scrollbarx.set)
 
         logo_width = 200
         self.logo_image = self.load_image("/graphics/logo.png", logo_width,int(logo_width/4.6))
