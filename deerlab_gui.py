@@ -9,6 +9,7 @@ from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationTool
 import numpy as np
 from itertools import cycle
 from PIL import Image, ImageTk
+from webbrowser import open_new
 import os 
 
 # Path to current file
@@ -369,7 +370,7 @@ class App(customtkinter.CTk):
             'ex_3pdeer': 2,
             'ex_4pdeer': 4,
             'ex_fwd5pdeer': 8,
-            'ex_rev5pdeer': 4,
+            'ex_rev5pdeer': 8,
             'ex_dqc': 8,
             'ex_sifter': 3, 
             'ex_ridme': 4
@@ -540,8 +541,13 @@ class App(customtkinter.CTk):
         self.frame_pulsedelays.grid(row=3, column=0, columnspan=2, pady=(0,5), sticky="ns")
         self.setup_pulsedelays('ex_4pdeer') 
 
-        self.pathways_label = customtkinter.CTkLabel(master=self.frame_modelling, text="Dipolar pathways")
-        self.pathways_label.grid(row=4, column=0, columnspan=2, pady=2, sticky="we")
+        self.frame_pathways_label = customtkinter.CTkFrame(master=self.frame_modelling,fg_color=App.dark_bckg)
+        self.frame_pathways_label.grid(row=4, column=0, columnspan=2, pady=(0,5), sticky="ns")
+        self.frame_modelling.grid_columnconfigure(0, weight=1000)
+        self.pathways_label = customtkinter.CTkLabel(master=self.frame_pathways_label, text="Dipolar pathways")
+        self.pathways_label.grid(row=0, column=0, pady=2, sticky="we")
+        self.pathways_label_help = customtkinter.CTkButton(master=self.frame_pathways_label, width=7, height=7, text="?", command=self.openbrowser, fg_color='#656565')
+        self.pathways_label_help.grid(row=0, column=2, pady=2, sticky="w")
         self.frame_pathways = customtkinter.CTkFrame(master=self.frame_modelling,fg_color=App.dark_bckg)
         self.frame_pathways.grid(row=5, column=0, columnspan=2)
         self.setup_pathways('ex_4pdeer') 
@@ -776,6 +782,11 @@ plt.show()
         text_file.close()
     #==============================================================================================================
 
+
+    def openbrowser(self):
+        ex_model = [ex_model for ex_model in App.ex_models if ex_model in self.Exmodel_menu.get()][0] 
+        url = f"https://jeschkelab.github.io/DeerLab/_autosummary/deerlab.{ex_model}.html"
+        open_new(url)
 
 if __name__ == "__main__":
     app = App()
