@@ -26,7 +26,7 @@ customtkinter.set_default_color_theme("green")  # Themes: "blue" (standard), "gr
 class App(customtkinter.CTk):
 
     WIDTH = 1350
-    HEIGHT = 750
+    HEIGHT = 800
         
     darker_bckg = '#232937'
     dark_bckg = '#393e4b'
@@ -214,7 +214,7 @@ class App(customtkinter.CTk):
                 # Reactivate the main menu buttons
                 self.run_button.configure(text='Run analysis', state='normal')
                 self.load_button.configure(state='normal')
-
+                self.script_button.configure(state='normal')
                 return # Finish the analysis and return to mainloop()
         #--------------------------------------------------------------------------------------------------
 
@@ -307,6 +307,7 @@ class App(customtkinter.CTk):
         # Us the OS dialog window to select a file
         file = filedialog.askopenfilename()
         if file=='': return
+        self.filepath = file 
 
         # Load the file with DeerLab
         t,Vexp = dl.deerload(file)
@@ -363,10 +364,21 @@ class App(customtkinter.CTk):
 
     #==============================================================================================================
     def setup_pathways(self,ex_modelname):
+        
+        Npathways_dict = {
+            'ex_3pdeer': 2,
+            'ex_4pdeer': 4,
+            'ex_fwd5pdeer': 8,
+            'ex_rev5pdeer': 4,
+            'ex_dqc': 8,
+            'ex_sifter': 3, 
+            'ex_ridme': 4
+        }
+
         ex_model = [ex_model for ex_model in App.ex_models if ex_model in ex_modelname ][0]        
         sig = signature(getattr(dl,ex_model))
         Ndelays = len([param for param in sig.parameters.values() if 'tau' in param.name])
-        Npathways = getattr(dl,ex_model)(*[0]*Ndelays).npathways
+        Npathways = Npathways_dict[ex_model]
         self.Npathways = Npathways
         self.Ndelays = Ndelays
 
@@ -464,7 +476,7 @@ class App(customtkinter.CTk):
                                                 fg_color='#656565',
                                                 image=self.script_button_image,
                                                 compound="right",
-                                                command=None)
+                                                command=self.generate_script)
         self.script_button.grid(row=11, column=0, pady=10, padx=20)
 
 
@@ -512,56 +524,41 @@ class App(customtkinter.CTk):
         self.frame_modelling.grid_columnconfigure(0, weight=1)
         self.frame_modelling.grid_columnconfigure(1, weight=1000)
         
-        self.Modelling_label = customtkinter.CTkLabel(master=self.frame_modelling, text="Modelling", text_font='Helvetica 14 bold')
+        self.Modelling_label = customtkinter.CTkLabel(master=self.frame_modelling, text="Modelling", text_font='Helvetica 13 bold')
         self.Modelling_label.grid(row=0, column=0, pady=(10,0), sticky="we")
 
         self.frame_models = customtkinter.CTkFrame(master=self.frame_modelling,width=400,fg_color=App.dark_bckg)
-        self.frame_models.grid(row=1, column=0, sticky="we", pady=0,  padx=15)
+        self.frame_models.grid(row=1, column=0, sticky="we", pady=0,  padx=(15,0))
 
-
-        self.Pmodel_label = customtkinter.CTkLabel(master=self.frame_models, text="Distribution:",width=50)
-        self.Pmodel_label.grid(row=0, column=0, pady=5, sticky="we")
-        self.Pmodel_menu = customtkinter.CTkOptionMenu(self.frame_models,width=280, values=App.dd_modelnames,
-                        dynamic_resizing=False, button_color=App.green, fg_color=App.dark_bckg, dropdown_hover_color=App.green)
-        self.Pmodel_menu.set(App.dd_modelnames[0])
-        self.Pmodel_menu.grid(row=0, column=1, pady=5, padx=5, sticky="we")
-
-        self.Bmodel_label = customtkinter.CTkLabel(master=self.frame_models, text="Background:",width=50)
-        self.Bmodel_label.grid(row=1, column=0, pady=5, sticky="we")
-        self.Bmodel_menu = customtkinter.CTkOptionMenu(self.frame_models,width=280, values=App.bg_modelnames,
-                        dynamic_resizing=False, button_color=App.green,fg_color=App.dark_bckg, dropdown_hover_color=App.green)
-        self.Bmodel_menu.set(App.bg_modelnames[1])
-        self.Bmodel_menu.grid(row=1, column=1, pady=5, padx=5, sticky="we")
-
-        self.Exmodel_label = customtkinter.CTkLabel(master=self.frame_models, text="Experiment:",width=50)
+        self.Exmodel_label = customtkinter.CTkLabel(master=self.frame_models, text="Experiment",width=50,text_font='Helvetica 10 bold')
         self.Exmodel_label.grid(row=2, column=0, pady=5, sticky="we")
-        self.Exmodel_menu = customtkinter.CTkOptionMenu(self.frame_models,width=280, values=App.ex_modelnames,
-                        dynamic_resizing=False,button_color=App.green, fg_color=App.dark_bckg, dropdown_hover_color=App.green,
-                        command=self.change_experiment)
+        self.Exmodel_menu = customtkinter.CTkOptionMenu(self.frame_models,width=280, values=App.ex_modelnames,dynamic_resizing=False, command=self.change_experiment)
         self.Exmodel_menu.set(App.ex_modelnames[1])
-        self.Exmodel_menu.grid(row=2, column=1, pady=5, padx=5, sticky="we")
-
+        self.Exmodel_menu.grid(row=2, column=1, pady=(5,0), padx=5, sticky="we")
 
         self.frame_pulsedelays = customtkinter.CTkFrame(master=self.frame_modelling,fg_color=App.dark_bckg)
-        self.frame_pulsedelays.grid(row=5, column=0, columnspan=2, pady=(0,5), sticky="ns")
-
-
+        self.frame_pulsedelays.grid(row=3, column=0, columnspan=2, pady=(0,5), sticky="ns")
         self.setup_pulsedelays('ex_4pdeer') 
 
         self.pathways_label = customtkinter.CTkLabel(master=self.frame_modelling, text="Dipolar pathways")
-        self.pathways_label.grid(row=6, column=0, columnspan=2, pady=2, sticky="we")
-
+        self.pathways_label.grid(row=4, column=0, columnspan=2, pady=2, sticky="we")
         self.frame_pathways = customtkinter.CTkFrame(master=self.frame_modelling,fg_color=App.dark_bckg)
-        self.frame_pathways.grid(row=7, column=0, columnspan=2)
-
+        self.frame_pathways.grid(row=5, column=0, columnspan=2)
         self.setup_pathways('ex_4pdeer') 
 
-        self.frame_distances = customtkinter.CTkFrame(master=self.frame_modelling,fg_color=App.dark_bckg)
-        self.frame_distances.grid(row=9, column=0, columnspan=2)
+        self.frame_Pmodels = customtkinter.CTkFrame(master=self.frame_modelling,width=400,fg_color=App.dark_bckg)
+        self.frame_Pmodels.grid(row=6, column=0, sticky="we", pady=(10,0),  padx=15)
 
+        self.Pmodel_label = customtkinter.CTkLabel(master=self.frame_Pmodels, text="Distribution",width=50,text_font='Helvetica 10 bold')
+        self.Pmodel_label.grid(row=0, column=0, pady=5, sticky="we")
+        self.Pmodel_menu = customtkinter.CTkOptionMenu(self.frame_Pmodels,width=280, values=App.dd_modelnames,dynamic_resizing=False, )
+        self.Pmodel_menu.set(App.dd_modelnames[0])
+        self.Pmodel_menu.grid(row=0, column=1, pady=5, padx=5, sticky="we")
+
+        self.frame_distances = customtkinter.CTkFrame(master=self.frame_modelling,fg_color=App.dark_bckg)
+        self.frame_distances.grid(row=7, column=0, columnspan=2)
         self.distances_label = customtkinter.CTkLabel(master=self.frame_distances, text="Distance range",width=70)
         self.distances_label.grid(row=1, column=0, rowspan=2,  pady=2, sticky="we")
-
         self.rmin_label = customtkinter.CTkLabel(master=self.frame_distances, text=f"min.",width=50) 
         self.rmin_label.grid(row=0, column=1,padx=5,sticky='we')
         self.rmin_entry = customtkinter.CTkEntry(master=self.frame_distances, placeholder_text="nm",width=50)
@@ -574,17 +571,22 @@ class App(customtkinter.CTk):
         self.dr_label.grid(row=0, column=3,padx=5,sticky='wes')
         self.dr_entry = customtkinter.CTkEntry(master=self.frame_distances, placeholder_text="nm",width=50)
         self.dr_entry.grid(row=1, column=3,padx=5,sticky='we')
-        self.autodistances_button = customtkinter.CTkButton(master=self.frame_distances,
-                                                            state = 'disableds',
-                                                            width=50,
-                                                            text="auto",
-                                                            command=self.automatic_distances)
+        self.autodistances_button = customtkinter.CTkButton(master=self.frame_distances,state = 'disableds', width=50, text="auto", command=self.automatic_distances)
         self.autodistances_button.grid(row=1, column=4, rowspan=2, padx=5, sticky="we")
         self.rmin_entry.insert(0,'1.5')
         self.rmax_entry.insert(0,'8')
         self.dr_entry.insert(0,'0.05')
 
-        self.Analysis_label = customtkinter.CTkLabel(master=self.frame_modelling, text="Analysis", text_font='Helvetica 14 bold')
+        self.frame_Bmodels = customtkinter.CTkFrame(master=self.frame_modelling,width=400,fg_color=App.dark_bckg)
+        self.frame_Bmodels.grid(row=8, column=0, sticky="we", pady=(10,0),  padx=15)
+
+        self.Bmodel_label = customtkinter.CTkLabel(master=self.frame_Bmodels, text="Background",width=50,text_font='Helvetica 10 bold')
+        self.Bmodel_label.grid(row=1, column=0, pady=5, sticky="we")
+        self.Bmodel_menu = customtkinter.CTkOptionMenu(self.frame_Bmodels,width=280, values=App.bg_modelnames, dynamic_resizing=False)
+        self.Bmodel_menu.set(App.bg_modelnames[1])
+        self.Bmodel_menu.grid(row=1, column=1, pady=5, padx=5, sticky="we")
+
+        self.Analysis_label = customtkinter.CTkLabel(master=self.frame_modelling, text="Analysis", text_font='Helvetica 13 bold')
         self.Analysis_label.grid(row=10, column=0, columnspan=2, pady=5, sticky="")
 
         self.regparam_frame = customtkinter.CTkFrame(master=self.frame_modelling,width=300,fg_color=App.dark_bckg)
@@ -617,7 +619,7 @@ class App(customtkinter.CTk):
         self.frame_results.grid_rowconfigure((1), weight=10)
 
 
-        self.Results_label = customtkinter.CTkLabel(master=self.frame_results, text="Results", text_font='Helvetica 14 bold')
+        self.Results_label = customtkinter.CTkLabel(master=self.frame_results, text="Results", text_font='Helvetica 13 bold')
         self.Results_label.grid(row=0, column=0, pady=(10,0), sticky="n")
 
         self.frame_textbox = customtkinter.CTkFrame(master=self.frame_results,width=650,fg_color=App.dark_bckg)
@@ -682,6 +684,98 @@ class App(customtkinter.CTk):
     def on_closing(self, event=0):
         self.destroy()
     #==============================================================================================================
+
+    #==============================================================================================================
+    def generate_script(self):
+
+        ex_model = [ex_model for ex_model in App.ex_models if ex_model in self.Exmodel_menu.get()][0] 
+        bg_model = [bg_model for bg_model in App.bg_models if bg_model in self.Bmodel_menu.get()][0]      
+        dd_model = [dd_model for dd_model in App.dd_models if dd_model in self.Pmodel_menu.get()][0]   
+        if dd_model!='None':
+            dd_model = 'dl.'+dd_model
+        rmin = float(self.rmin_entry.get())            
+        rmax = float(self.rmax_entry.get())            
+        dr = float(self.dr_entry.get())   
+
+        script = f"""
+import numpy as np 
+import deerlab as dl 
+import matplotlib.pyplot as plt 
+
+# File location
+file = '{self.filepath}'
+
+# Experimental parameters
+deadtime = 0.1  # Acquisition deadtime, us \n"""
+        for n in range(self.Ndelays):
+            tau_value = float(getattr(self,f"delay{n+1}_entry").get())
+            script += f"tau{n+1} = {tau_value}      # Inter-pulse delay #{n+1}, us \n"
+        script += f"""
+# Load the experimental data
+t,Vexp = dl.deerload(file)
+
+# Pre-processing
+Vexp = dl.correctphase(Vexp) # Phase correction
+Vexp = Vexp/np.max(Vexp)     # Rescaling (aesthetic)
+t = t - t[0] + deadtime      # Account for deadtime
+
+# Distance vector
+r = np.arange({rmin},{rmax},{dr}) # nm
+
+# Construct the model
+experiment = dl.{ex_model}({','.join([f'tau{n+1}' for n in range(self.Ndelays)])}, pathways={[n+1 for n in range(self.Npathways) if bool(getattr(self,f'pathway{n+1}_switch').get())]})
+Vmodel = dl.dipolarmodel(t,r,Pmodel={dd_model},Bmodel=dl.{bg_model}, experiment=experiment)
+
+# Fit the model to the data
+results = dl.fit(Vmodel,Vexp)
+
+# Print results summary
+print(results)
+
+# Extract fitted dipolar signal
+Vfit = results.model
+Vci = results.modelUncert.ci(95)
+
+# Extract fitted distance distribution
+Pfit = results.P
+Pci95 = results.PUncert.ci(95)
+Pci50 = results.PUncert.ci(50)
+
+# Plot the results
+plt.figure(figsize=[6,7])
+green = '{App.green}'
+
+# Plot experimental data
+plt.subplot(211)
+plt.plot(t,Vexp,'.',color='grey',label='Data')
+
+# Plot the fitted signal
+plt.plot(t,Vfit,linewidth=3,label='Fit',color=green)
+plt.fill_between(t,Vci[:,0],Vci[:,1],alpha=0.3,color=green)
+plt.legend(frameon=False,loc='best')
+plt.xlabel('Time $t$ ($\mu s$)')
+plt.ylabel('$V(t)$ (arb.u.)')
+
+# Plot the distance distribution
+plt.subplot(212)
+plt.plot(r,Pfit,linewidth=3,label='Fit',color=green)
+plt.fill_between(r,Pci95[:,0],Pci95[:,1],alpha=0.3,color=green,label='95%-Conf. Inter.',linewidth=0)
+plt.fill_between(r,Pci50[:,0],Pci50[:,1],alpha=0.5,color=green,label='50%-Conf. Inter.',linewidth=0)
+plt.legend(frameon=False,loc='best')
+plt.autoscale(enable=True, axis='both', tight=True)
+plt.xlabel('Distance $r$ (nm)')
+plt.ylabel('$P(r)$ (1/nm)')
+plt.tight_layout()
+plt.show()
+        """
+        file = filedialog.asksaveasfilename(defaultextension=".py")
+        if file is None:
+            return
+        text_file = open(file, "wt", encoding='utf-8')
+        n = text_file.write(script)
+        text_file.close()
+    #==============================================================================================================
+
 
 if __name__ == "__main__":
     app = App()
