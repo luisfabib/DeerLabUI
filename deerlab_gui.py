@@ -138,13 +138,16 @@ class App(customtkinter.CTk):
         self.load_button.configure(state='disabled')
 
         # Get the selection of models 
-        ex_model = getattr(dl,[ex_model for ex_model in App.ex_models if ex_model in self.Exmodel_menu.get()][0])     
-        bg_model = getattr(dl,[bg_model for bg_model in App.bg_models if bg_model in self.Bmodel_menu.get()][0])        
-        dd_model = [dd_model for dd_model in App.dd_models if dd_model in self.Pmodel_menu.get()][0]   
-        if dd_model=='None':
+        self.analysis_ex_model = [ex_model for ex_model in App.ex_models if ex_model in self.Exmodel_menu.get()][0]
+        self.analysis_bg_model = [bg_model for bg_model in App.bg_models if bg_model in self.Bmodel_menu.get()][0]      
+        self.analysis_dd_model = [dd_model for dd_model in App.dd_models if dd_model in self.Pmodel_menu.get()][0]  
+
+        bg_model = getattr(dl,self.analysis_bg_model) 
+        ex_model = getattr(dl,self.analysis_ex_model) 
+        if self.analysis_dd_model=='None':
             dd_model = None
         else: 
-            dd_model = getattr(dl,dd_model)
+            dd_model = getattr(dl,self.analysis_dd_model)
 
         # Construct distance vector
         rmin = float(self.rmin_entry.get())            
@@ -159,12 +162,12 @@ class App(customtkinter.CTk):
 
         # Construct the experiment model 
         taus = [float(getattr(self,f"delay{n+1}_entry").get()) for n in range(self.Ndelays)]
-        pathways = [n+1 for n in range(self.Npathways) if bool(getattr(self,f'pathway{n+1}_switch').get())]
-        experiment = ex_model(*taus,pathways=pathways)
+        self.analysis_pathways = [n+1 for n in range(self.Npathways) if bool(getattr(self,f'pathway{n+1}_switch').get())]
+        experiment = ex_model(*taus,pathways=self.analysis_pathways)
 
         # Construct the dipolar model
         Vmodel = dl.dipolarmodel(self.data['t'],r,Pmodel=dd_model, Bmodel=bg_model, experiment=experiment)
-
+        self.Vmodel_signature = Vmodel.signature
         # Get options for the analysis 
         regparam = self.regparam_menu.get().lower()
         if self.compactness_switch.get():
@@ -208,7 +211,7 @@ class App(customtkinter.CTk):
                 self.textbox.insert(tkinter.INSERT,results._summary)
 
                 # Update the plots with the analysis results
-                self.results = {'r':r,'P':P,'PUncert':PUncert,'t':self.data['t'], 'model':results.model}
+                self.results = {'r':r,'P':P,'PUncert':PUncert,'t':self.data['t'], 'model':results.model, 'results':results}
                 self.plot_distribution()
                 self.plot_data()
 
@@ -248,6 +251,37 @@ class App(customtkinter.CTk):
 
 
     #==============================================================================================================
+    def get_unmodulated_contribution(self):
+        results = self.results['results']
+        if len(self.analysis_pathways)>1:
+            pathways = [{
+                'amp': getattr(results,f'lam{n}'),
+                'reftime': getattr(results,f'reftime{n}')
+            } for n in self.analysis_pathways]
+        else:
+            pathways = [{'amp':results.mod,'reftime':results.reftime}]
+        Bmodel = getattr(dl,self.analysis_bg_model)
+        Bsubset = np.zeros(Bmodel.Nnonlin-('lam' in Bmodel._parameter_list()),dtype=int)
+        for idx,param in enumerate(self.Vmodel_signature):
+            if param in Bmodel._parameter_list(order='vector'):
+                Bsubset[getattr(Bmodel,param).idx] = idx
+        if Bmodel is None: 
+            Bfcn = np.ones_like(self.results['t'])
+        if hasattr(Bmodel,'lam'):
+            Bfcn = lambda t,lam: Bmodel.nonlinmodel(t,*np.concatenate([results.param[Bsubset],[lam]]))
+        else:
+            Bfcn = lambda t,_: Bmodel.nonlinmodel(t,*results.param[Bsubset])
+        Lam0 = 1 - np.sum([pathway['amp'] for pathway in pathways])
+        if self.analysis_dd_model=='None':
+            scale = results.P_scale
+        else:
+            scale = results.scale
+        return scale*Lam0*dl.dipolarbackground(self.results['t'],pathways,Bfcn)
+    #==============================================================================================================
+
+
+
+    #==============================================================================================================
     def plot_data(self):
 
             
@@ -277,6 +311,7 @@ class App(customtkinter.CTk):
 
             if hasattr(self,'results'): 
                 ax.plot(self.results['t'],self.results['model'],'-',color=App.green, linewidth=2.5)
+                ax.plot(self.results['t'],self.get_unmodulated_contribution(),'--',color=App.green, linewidth=1.5)
 
             ax.set_ylabel('V(t) [arb.u.]')
             ax.set_xlabel('t [μs]')
